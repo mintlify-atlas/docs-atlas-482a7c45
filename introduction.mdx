@@ -1,0 +1,133 @@
+---
+title: 'Introduction'
+description: 'Learn about the User Management Microservice - a Spring Boot application for user registration and authentication'
+---
+
+## Overview
+
+The User Management Microservice is a demo Spring Boot application that provides secure user registration and authentication capabilities. Built with hexagonal architecture principles, it offers a clean separation of concerns between business logic and external dependencies.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="User Registration" icon="user-plus">
+    Register new users with email validation and secure password requirements
+  </Card>
+  <Card title="User Authentication" icon="lock">
+    JWT-based authentication system for secure user login
+  </Card>
+  <Card title="API Documentation" icon="book">
+    Interactive OpenAPI/Swagger documentation included
+  </Card>
+  <Card title="Hexagonal Architecture" icon="hexagon">
+    Clean architecture with ports and adapters pattern
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+The microservice is built with modern Java technologies:
+
+### Core Framework
+- **Spring Boot** - Application framework with embedded server
+- **Spring Security** - Authentication and authorization
+- **Spring Data JPA** - Data persistence layer
+- **Java 11** - Programming language
+
+### Key Dependencies
+
+```gradle build.gradle
+// Spring Boot Starters
+implementation 'org.springframework.boot:spring-boot-starter-actuator'
+implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+implementation 'org.springframework.boot:spring-boot-starter-validation'
+implementation 'org.springframework.boot:spring-boot-starter-web'
+implementation 'org.springframework.boot:spring-boot-starter-security'
+
+// JWT for token-based authentication
+implementation "io.jsonwebtoken:jjwt:${jsonWebTokenVersion}"
+
+// OpenAPI documentation
+implementation "org.springdoc:springdoc-openapi-ui:${springDocOpenApiVersion}"
+```
+
+### Database
+- **H2 Database** - In-memory database for development and testing
+
+### Build & Tooling
+- **Gradle** - Build automation tool
+- **Lombok** - Reduces boilerplate code
+- **MapStruct** - Object mapping framework
+- **JaCoCo** - Code coverage reporting
+
+## Architecture
+
+This application follows **Hexagonal Architecture** (also known as Ports and Adapters), which decouples the core business logic from external dependencies like databases, UI frameworks, and other systems.
+
+<Note>
+The application is divided into three main layers:
+- **Web Layer** (External): Handles HTTP communication and REST endpoints
+- **Core Layer** (Internal): Contains business logic, domain models, and use cases
+- **Data Source Layer** (External): Manages data persistence and external integrations
+</Note>
+
+### Layer Breakdown
+
+**Core Layer**
+- `Model`: Domain entities representing business concepts
+- `Domain`: Domain services with complex business logic
+- `Service`: Use case implementations for specific user actions
+- `Repo`: Repository interfaces for data access
+
+**Web Layer**
+- REST controllers (adapters) for HTTP endpoints
+- DTOs for request/response serialization
+- Exception handling advice
+
+**Data Source Layer**
+- JPA repositories and entities
+- Database configuration
+- Security and JWT configuration
+
+## API Endpoints
+
+The microservice exposes two main REST endpoints:
+
+<Card title="POST /api/v1/sign-up" icon="user-plus">
+  Register a new user with email, password, and optional phone numbers
+</Card>
+
+<Card title="POST /api/v1/login" icon="right-to-bracket">
+  Authenticate a user using a JWT token
+</Card>
+
+## Server Configuration
+
+The application runs with the following default configuration:
+
+```yaml application.yaml
+server:
+  port: 8080
+  servlet:
+    context-path: /user-management
+
+jwt:
+  issuer: fbaron.com
+  secret: eac4fdc0548e4a8c9ef9ae599b498ec2
+  expiration: 86400000  # 24 hours in milliseconds
+```
+
+<Warning>
+The JWT secret shown above is for demonstration purposes only. In production, use a secure secret stored in environment variables.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get the microservice running locally in minutes
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>

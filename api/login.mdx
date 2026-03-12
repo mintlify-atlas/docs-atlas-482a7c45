@@ -1,0 +1,207 @@
+---
+title: 'Login'
+description: 'Authenticate and log in an existing user'
+api: 'POST /user-management/api/v1/login'
+---
+
+## Overview
+
+The Login endpoint allows you to authenticate an existing user by providing their authentication token. The token is obtained during the sign-up process.
+
+<Note>
+  This endpoint requires the user's token obtained from the Sign Up endpoint.
+</Note>
+
+## Endpoint
+
+```
+POST /user-management/api/v1/login
+```
+
+## Request Headers
+
+<ParamField header="Content-Type" type="string" required>
+  Must be `application/json`
+</ParamField>
+
+<ParamField header="Accept" type="string" required>
+  Must be `application/json`
+</ParamField>
+
+## Request Body
+
+<ParamField body="token" type="string" required>
+  The authentication token for the user. This token is generated during sign-up and must be provided to log in.
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="UUID">
+  Unique identifier of the logged-in user
+</ResponseField>
+
+<ResponseField name="created" type="string">
+  Timestamp when the user was originally created (format: "MMM dd, yyyy hh:mm:ss a")
+</ResponseField>
+
+<ResponseField name="lastLogin" type="string">
+  Updated timestamp of the user's current login (format: "MMM dd, yyyy hh:mm:ss a")
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  The user's authentication token
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean">
+  Indicates whether the user account is active
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The user's full name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The user's email address
+</ResponseField>
+
+<ResponseField name="password" type="string">
+  The user's hashed password
+</ResponseField>
+
+<ResponseField name="phones" type="array">
+  List of phone numbers associated with the user
+  <Expandable title="Phone object structure">
+    <ResponseField name="number" type="long">
+      The phone number
+    </ResponseField>
+    <ResponseField name="cityCode" type="integer">
+      The city or area code
+    </ResponseField>
+    <ResponseField name="countryCode" type="string">
+      The country code
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Status Codes
+
+<ResponseField name="200" type="Success">
+  User successfully logged in
+</ResponseField>
+
+<ResponseField name="400" type="Bad Request">
+  Invalid request body or validation errors
+</ResponseField>
+
+<ResponseField name="403" type="Forbidden">
+  Access denied - invalid or expired token
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  User not found for the provided token
+</ResponseField>
+
+<ResponseField name="405" type="Method Not Allowed">
+  HTTP method not supported for this endpoint
+</ResponseField>
+
+<ResponseField name="415" type="Unsupported Media Type">
+  Request content type is not application/json
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  An unexpected error occurred on the server
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST http://localhost:8080/user-management/api/v1/login \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }'
+```
+
+```json Request Body
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+```json Response (200 Success)
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "created": "Mar 12, 2026 10:30:45 AM",
+  "lastLogin": "Mar 12, 2026 02:15:30 PM",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "isActive": true,
+  "name": "John Doe",
+  "email": "john.doe@example.com",
+  "password": "$2a$10$hashed_password_string",
+  "phones": [
+    {
+      "number": 1234567890,
+      "cityCode": 1,
+      "countryCode": "+1"
+    }
+  ]
+}
+```
+
+```json Error Response (400 Bad Request)
+{
+  "timestamp": "2026-03-12T14:15:30.123Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "token must not be null",
+  "path": "/user-management/api/v1/login"
+}
+```
+
+```json Error Response (403 Forbidden)
+{
+  "timestamp": "2026-03-12T14:15:30.123Z",
+  "status": 403,
+  "error": "Forbidden",
+  "message": "Invalid or expired token",
+  "path": "/user-management/api/v1/login"
+}
+```
+
+```json Error Response (404 Not Found)
+{
+  "timestamp": "2026-03-12T14:15:30.123Z",
+  "status": 404,
+  "error": "Not Found",
+  "message": "User not found for the provided token",
+  "path": "/user-management/api/v1/login"
+}
+```
+
+</CodeGroup>
+
+## Implementation Reference
+
+The Login endpoint is implemented in:
+- Controller: `com.fbaron.web.rest.LoginRestAdapter` (LoginRestAdapter.java:67)
+- Request DTO: `com.fbaron.web.dto.user.LoginDTO` (LoginDTO.java)
+- Response DTO: `com.fbaron.web.dto.user.UserDTO` (UserDTO.java)
+
+## Authentication Flow
+
+1. **Sign Up**: User registers via the `/sign-up` endpoint and receives a token
+2. **Save Token**: Client application stores the token securely
+3. **Login**: User authenticates by providing the token to this endpoint
+4. **Access Granted**: Server validates the token and returns updated user information with `lastLogin` timestamp
+
+<Tip>
+  The `lastLogin` field is automatically updated each time a user successfully logs in.
+</Tip>
+
+<Warning>
+  Keep the authentication token secure and never expose it in client-side code or logs. Treat it like a password.
+</Warning>

@@ -1,0 +1,510 @@
+---
+title: "Web Layer"
+description: "Understanding REST adapters, DTOs, and the web layer in hexagonal architecture"
+---
+
+## Overview
+
+The **Web Layer** is an **external layer** that acts as a **driving adapter** in the hexagonal architecture. It handles HTTP communication, translates external requests into domain operations, and formats responses for clients.
+
+<Note>
+The web layer depends on the core layer, but the core layer has no knowledge of REST, HTTP, or any web concepts.
+</Note>
+
+## Responsibilities
+
+The web layer is responsible for:
+
+<CardGroup cols={2}>
+  <Card title="HTTP Communication" icon="network-wired">
+    Exposing REST endpoints and handling HTTP requests/responses
+  </Card>
+  <Card title="Request Validation" icon="check">
+    Validating incoming data before passing to the core
+  </Card>
+  <Card title="Data Transformation" icon="arrows-rotate">
+    Converting DTOs to domain models and vice versa
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation">
+    Translating domain exceptions to HTTP error responses
+  </Card>
+</CardGroup>
+
+## Package Structure
+
+```
+web/
+├── rest/               # REST controllers (adapters)
+│   ├── SignUpRestAdapter.java
+│   └── LoginRestAdapter.java
+├── dto/                # Data Transfer Objects
+│   ├── user/
+│   │   ├── UserDTO.java
+│   │   ├── SignUpDTO.java
+│   │   └── LoginDTO.java
+│   ├── phone/
+│   │   └── PhoneDTO.java
+│   └── exception/
+│       ├── ExceptionDetailDTO.java
+│       └── CustomErrorDTO.java
+├── mapper/             # DTO to Model mappers
+│   └── UserDtoMapper.java
+└── advise/             # Global exception handlers
+    └── ExceptionHandlerAdvice.java
+```
+
+## REST Adapters
+
+REST adapters are Spring controllers that expose HTTP endpoints. They use the core services through their interfaces (ports).
+
+### SignUpRestAdapter
+
+Handles user registration:
+
+```java
+// src/main/java/com/fbaron/web/rest/SignUpRestAdapter.java
+package com.fbaron.web.rest;
+
+import com.fbaron.core.service.user.UserService;
+import com.fbaron.web.dto.user.SignUpDTO;
+import com.fbaron.web.dto.user.UserDTO;
+import com.fbaron.web.mapper.UserDtoMapper;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
+
+@RestController
+@RequestMapping("/api/v1/sign-up")
+@RequiredArgsConstructor
+public class SignUpRestAdapter {
+
+    private final UserService userService;      // Uses the driving port
+    private final UserDtoMapper userDtoMapper;
+
+    @PostMapping
+    public ResponseEntity<UserDTO> signUp(@RequestBody @Valid SignUpDTO dto) {
+        // 1. Convert DTO to domain model
+        var user = userDtoMapper.dtoToModel(dto);
+        
+        // 2. Delegate to core business logic
+        user = userService.signUp(user);
+        
+        // 3. Convert domain model back to DTO
+        var userDTO = userDtoMapper.modelToDTO(user);
+        
+        // 4. Return HTTP response
+        return ResponseEntity.status(HttpStatus.CREATED).body(userDTO);
+    }
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Step 1: DTO to Model Conversion">
+    The adapter receives a `SignUpDTO` from the HTTP request body. This DTO is specific to the web layer and contains only the data needed for sign-up.
+    
+    ```java
+    var user = userDtoMapper.dtoToModel(dto);
+    ```
+    
+    The mapper converts this to a `User` domain model that the core understands.
+  </Accordion>
+  
+  <Accordion title="Step 2: Core Service Call">
+    The adapter calls the core service through the `UserService` interface:
+    
+    ```java
+    user = userService.signUp(user);
+    ```
+    
+    The adapter has **no knowledge** of how sign-up is implemented. It only knows the contract defined by the interface.
+  </Accordion>
+  
+  <Accordion title="Step 3: Model to DTO Conversion">
+    The returned domain model is converted back to a DTO for the HTTP response:
+    
+    ```java
+    var userDTO = userDtoMapper.modelToDTO(user);
+    ```
+    
+    This DTO may expose different fields than the domain model (e.g., hiding the password).
+  </Accordion>
+  
+  <Accordion title="Step 4: HTTP Response">
+    Finally, the adapter wraps the DTO in a proper HTTP response:
+    
+    ```java
+    return ResponseEntity.status(HttpStatus.CREATED).body(userDTO);
+    ```
+    
+    HTTP concerns like status codes stay in the web layer.
+  </Accordion>
+</AccordionGroup>
+
+### LoginRestAdapter
+
+Handles user authentication:
+
+```java
+// src/main/java/com/fbaron/web/rest/LoginRestAdapter.java
+package com.fbaron.web.rest;
+
+import com.fbaron.core.service.user.UserService;
+import com.fbaron.web.dto.user.LoginDTO;
+import com.fbaron.web.dto.user.UserDTO;
+import com.fbaron.web.mapper.UserDtoMapper;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
+
+@RestController
+@RequestMapping("/api/v1/login")
+@RequiredArgsConstructor
+public class LoginRestAdapter {
+
+    private final UserService userService;
+    private final UserDtoMapper userDtoMapper;
+
+    @PostMapping
+    public ResponseEntity<UserDTO> login(@RequestBody @Valid LoginDTO dto) {
+        // Call core service with token
+        var user = userService.login(dto.getToken());
+        
+        // Convert to DTO and return
+        var userDTO = userDtoMapper.modelToDTO(user);
+        return ResponseEntity.status(HttpStatus.OK).body(userDTO);
+    }
+}
+```
+
+### OpenAPI Documentation
+
+The adapters include OpenAPI annotations for API documentation:
+
+```java
+@Operation(summary = "signUp",
+        description = "Registers a new user in the system")
+@ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Created",
+                content = @Content(mediaType = "application/json",
+                        schema = @Schema(implementation = UserDTO.class))),
+        @ApiResponse(responseCode = "400", description = "Bad Request",
+                content = @Content(mediaType = "application/json",
+                        schema = @Schema(implementation = ExceptionDetailDTO.class))),
+        @ApiResponse(responseCode = "409", description = "Conflict",
+                content = @Content(mediaType = "application/json",
+                        schema = @Schema(implementation = ExceptionDetailDTO.class)))
+})
+@PostMapping
+public ResponseEntity<UserDTO> signUp(@RequestBody @Valid SignUpDTO dto) {
+    // ...
+}
+```
+
+<Note>
+OpenAPI annotations are web layer concerns. The core layer has no knowledge of Swagger or API documentation.
+</Note>
+
+## Data Transfer Objects (DTOs)
+
+DTOs are simple objects that define the shape of data transmitted over HTTP.
+
+### SignUpDTO
+
+Defines the data required to register a user:
+
+```java
+// src/main/java/com/fbaron/web/dto/user/SignUpDTO.java
+package com.fbaron.web.dto.user;
+
+import com.fbaron.core.util.PasswordFormat;
+import com.fbaron.web.dto.phone.PhoneDTO;
+import lombok.Data;
+
+import javax.validation.constraints.Email;
+import javax.validation.constraints.NotBlank;
+import java.util.List;
+
+@Data
+public class SignUpDTO {
+    
+    @NotBlank(message = "Name is required")
+    private String name;
+    
+    @Email(message = "Invalid email format")
+    @NotBlank(message = "Email is required")
+    private String email;
+    
+    @PasswordFormat
+    @NotBlank(message = "Password is required")
+    private String password;
+    
+    private List<PhoneDTO> phones;
+}
+```
+
+<Note>
+Validation annotations like `@NotBlank`, `@Email`, and `@PasswordFormat` ensure data quality **before** it reaches the core layer.
+</Note>
+
+### UserDTO
+
+Defines the user data returned in responses:
+
+```java
+// src/main/java/com/fbaron/web/dto/user/UserDTO.java
+package com.fbaron.web.dto.user;
+
+import com.fbaron.web.dto.phone.PhoneDTO;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@Data
+public class UserDTO {
+    private UUID id;
+    private String name;
+    private String email;
+    // Note: password is NOT included
+    private LocalDateTime created;
+    private LocalDateTime lastLogin;
+    private String token;
+    private boolean isActive;
+    private List<PhoneDTO> phones;
+}
+```
+
+<Note>
+Notice that `UserDTO` does **not** include the password field. This is a security measure - DTOs let you control exactly what data is exposed via the API.
+</Note>
+
+### LoginDTO
+
+Defines the login request:
+
+```java
+// src/main/java/com/fbaron/web/dto/user/LoginDTO.java
+package com.fbaron.web.dto.user;
+
+import lombok.Data;
+import javax.validation.constraints.NotBlank;
+
+@Data
+public class LoginDTO {
+    
+    @NotBlank(message = "Token is required")
+    private String token;
+}
+```
+
+### PhoneDTO
+
+```java
+// src/main/java/com/fbaron/web/dto/phone/PhoneDTO.java
+package com.fbaron.web.dto.phone;
+
+import lombok.Data;
+
+@Data
+public class PhoneDTO {
+    private String number;
+    private String cityCode;
+    private String countryCode;
+}
+```
+
+## Mappers
+
+Mappers convert between DTOs and domain models.
+
+### UserDtoMapper
+
+Uses MapStruct for automatic mapping:
+
+```java
+// src/main/java/com/fbaron/web/mapper/UserDtoMapper.java
+package com.fbaron.web.mapper;
+
+import com.fbaron.core.model.user.User;
+import com.fbaron.web.dto.user.SignUpDTO;
+import com.fbaron.web.dto.user.UserDTO;
+import org.mapstruct.Mapper;
+import org.mapstruct.ReportingPolicy;
+
+@Mapper(componentModel = "spring", 
+        unmappedTargetPolicy = ReportingPolicy.IGNORE)
+public interface UserDtoMapper {
+
+    User dtoToModel(SignUpDTO dto);
+
+    UserDTO modelToDTO(User model);
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Why use mappers?">
+    Mappers provide:
+    1. **Separation of concerns**: DTOs and models can evolve independently
+    2. **Security**: Control which fields are exposed externally
+    3. **Flexibility**: Different DTOs for different use cases (SignUpDTO vs UserDTO)
+    4. **Maintainability**: Centralized mapping logic
+  </Accordion>
+  
+  <Accordion title="MapStruct benefits">
+    MapStruct generates implementation at compile time:
+    - Type-safe
+    - High performance (no reflection)
+    - Compile-time error checking
+    - Auto-mapping for fields with same names
+  </Accordion>
+</AccordionGroup>
+
+## Exception Handling
+
+The web layer translates domain exceptions into HTTP error responses.
+
+### Exception Handler Advice
+
+```java
+// src/main/java/com/fbaron/web/advise/ExceptionHandlerAdvice.java
+package com.fbaron.web.advise;
+
+import com.fbaron.core.exception.user.UserAlreadyExistsException;
+import com.fbaron.core.exception.user.UserNotFoundException;
+import com.fbaron.core.exception.jwt.JwtSignatureException;
+import com.fbaron.web.dto.exception.ExceptionDetailDTO;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+public class ExceptionHandlerAdvice {
+
+    @ExceptionHandler(UserAlreadyExistsException.class)
+    public ResponseEntity<ExceptionDetailDTO> handleUserAlreadyExists(
+            UserAlreadyExistsException ex) {
+        var error = new ExceptionDetailDTO(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ExceptionDetailDTO> handleUserNotFound(
+            UserNotFoundException ex) {
+        var error = new ExceptionDetailDTO(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    @ExceptionHandler(JwtSignatureException.class)
+    public ResponseEntity<ExceptionDetailDTO> handleJwtSignature(
+            JwtSignatureException ex) {
+        var error = new ExceptionDetailDTO(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+}
+```
+
+<Note>
+Domain exceptions are pure business concepts. The web layer translates them to appropriate HTTP status codes:
+- `UserAlreadyExistsException` → 409 Conflict
+- `UserNotFoundException` → 404 Not Found
+- `JwtSignatureException` → 403 Forbidden
+</Note>
+
+## Request/Response Flow
+
+```
+1. HTTP POST /api/v1/sign-up
+   Body: {"name": "John", "email": "john@example.com", ...}
+   ↓
+2. SignUpRestAdapter.signUp(SignUpDTO)
+   - Validates request (@Valid)
+   - Maps DTO to User model
+   ↓
+3. UserService.signUp(User)
+   - Core business logic executes
+   - Returns User with ID, token, timestamps
+   ↓
+4. Map User to UserDTO
+   - Excludes password
+   - Includes all other fields
+   ↓
+5. HTTP 201 Created
+   Body: {"id": "...", "name": "John", "token": "...", ...}
+```
+
+## Key Principles
+
+<CardGroup cols={2}>
+  <Card title="Thin Controllers" icon="layer-group">
+    Controllers should only handle HTTP concerns and delegate business logic to the core
+  </Card>
+  <Card title="DTO Validation" icon="shield-check">
+    Validate input at the boundary before passing to the core
+  </Card>
+  <Card title="Clean Separation" icon="scissors">
+    DTOs are web layer concepts, never used in the core
+  </Card>
+  <Card title="Error Translation" icon="language">
+    Convert domain exceptions to appropriate HTTP responses
+  </Card>
+</CardGroup>
+
+## Benefits of This Approach
+
+<AccordionGroup>
+  <Accordion title="API Evolution">
+    You can change your API structure (DTOs) without affecting business logic. For example, adding API versioning:
+    
+    ```java
+    @RequestMapping("/api/v2/sign-up")  // New version
+    public class SignUpRestAdapterV2 {
+        // Different DTOs, same core service
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Multiple Interfaces">
+    Add GraphQL, gRPC, or CLI interfaces that use the same core services:
+    
+    ```java
+    @Controller
+    public class UserGraphQLAdapter {
+        private final UserService userService;  // Same service!
+        // GraphQL resolvers
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Testing">
+    Test controllers without business logic complexity:
+    
+    ```java
+    @WebMvcTest(SignUpRestAdapter.class)
+    class SignUpRestAdapterTest {
+        @MockBean
+        private UserService userService;  // Mock the core
+        
+        // Test only HTTP layer concerns
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Core Layer" icon="brain" href="/architecture/core-layer">
+    Understand the business logic that powers the API
+  </Card>
+  <Card title="Data Layer" icon="database" href="/architecture/data-layer">
+    Learn how data is persisted
+  </Card>
+</CardGroup>

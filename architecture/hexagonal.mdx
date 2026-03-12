@@ -1,0 +1,305 @@
+---
+title: "Hexagonal Architecture Pattern"
+description: "Deep dive into the Ports and Adapters pattern implementation"
+---
+
+## What is Hexagonal Architecture?
+
+Hexagonal Architecture, introduced by Alistair Cockburn, is a software design pattern that aims to create loosely coupled application components. The pattern divides a system into several loosely-coupled interchangeable components, each connected through ports and adapters.
+
+<Note>
+The "hexagonal" shape is symbolic - it represents the idea that there are multiple ports for different purposes, not that there must be exactly six sides.
+</Note>
+
+## Core Concepts
+
+### The Hexagon (Core Domain)
+
+The center hexagon represents the **core business logic** of your application. In our User Management Microservice, this includes:
+
+- **Domain Models**: `User`, `Phone`
+- **Business Logic**: User validation, password encoding, token generation
+- **Use Cases**: Sign up, login, user retrieval
+
+```java
+// Core domain model (src/main/java/com/fbaron/core/model/user/User.java)
+package com.fbaron.core.model.user;
+
+@Data
+@Builder
+public class User {
+    private UUID id;
+    private String name;
+    private String email;
+    private String password;
+    private LocalDateTime created;
+    private LocalDateTime lastLogin;
+    private String token;
+    private boolean isActive;
+    private List<Phone> phones;
+}
+```
+
+<Note>
+Notice that the domain model has no JPA annotations or framework dependencies. It's a pure POJO (Plain Old Java Object).
+</Note>
+
+### Ports (Interfaces)
+
+Ports are the application's boundaries defined as interfaces. They come in two types:
+
+<CardGroup cols={2}>
+  <Card title="Driving Ports (Primary)" icon="arrow-right">
+    Define what the application **can do**. External actors use these ports to interact with the application.
+  </Card>
+  <Card title="Driven Ports (Secondary)" icon="arrow-left">
+    Define what the application **needs**. The core uses these ports to interact with external systems.
+  </Card>
+</CardGroup>
+
+#### Driving Port Example
+
+The `UserService` interface is a driving port that defines the application's capabilities:
+
+```java
+// src/main/java/com/fbaron/core/service/user/UserService.java
+package com.fbaron.core.service.user;
+
+public interface UserService {
+    User signUp(User user);
+    User login(String token);
+    Optional<User> getUserByEmail(String email);
+}
+```
+
+#### Driven Port Example
+
+The `UserRepository` interface is a driven port that defines what the core needs from persistence:
+
+```java
+// src/main/java/com/fbaron/core/repo/user/UserRepository.java
+package com.fbaron.core.repo.user;
+
+public interface UserRepository {
+    User saveUser(User user);
+    Optional<User> findUserByEmail(String email);
+}
+```
+
+<Note>
+Both interfaces are defined in the **core layer**, ensuring that the core dictates its requirements without knowing about implementation details.
+</Note>
+
+### Adapters (Implementations)
+
+Adapters are concrete implementations that connect the core to the outside world.
+
+#### Driving Adapter: REST Controller
+
+The `SignUpRestAdapter` is a driving adapter that converts HTTP requests to core service calls:
+
+```java
+// src/main/java/com/fbaron/web/rest/SignUpRestAdapter.java
+@RestController
+@RequestMapping("/api/v1/sign-up")
+@RequiredArgsConstructor
+public class SignUpRestAdapter {
+    private final UserService userService;  // Uses the driving port
+    private final UserDtoMapper userDtoMapper;
+
+    @PostMapping
+    public ResponseEntity<UserDTO> signUp(@RequestBody @Valid SignUpDTO dto) {
+        var user = userDtoMapper.dtoToModel(dto);
+        user = userService.signUp(user);  // Calls the port
+        var userDTO = userDtoMapper.modelToDTO(user);
+        return ResponseEntity.status(HttpStatus.CREATED).body(userDTO);
+    }
+}
+```
+
+#### Driven Adapter: JPA Repository
+
+The `UserJpaAdapter` is a driven adapter that implements the repository port:
+
+```java
+// src/main/java/com/fbaron/data/jpa/user/UserJpaAdapter.java
+@RequiredArgsConstructor
+public class UserJpaAdapter implements UserRepository {  // Implements the driven port
+    private final UserJpaRepository userJpaRepository;
+    private final UserJpaMapper userJpaMapper;
+
+    @Override
+    public User saveUser(User user) {
+        var userEntity = userJpaMapper.modelToEntity(user);
+        userEntity = userJpaRepository.save(userEntity);
+        return userJpaMapper.entityToModel(userEntity);
+    }
+
+    @Override
+    public Optional<User> findUserByEmail(String email) {
+        return userJpaRepository.findByEmail(email)
+                .map(userJpaMapper::entityToModel);
+    }
+}
+```
+
+## Dependency Direction
+
+One of the most important aspects of hexagonal architecture is the **dependency rule**:
+
+<Note>
+**All dependencies point inward toward the core.** External layers depend on the core, but the core never depends on external layers.
+</Note>
+
+```
+┌─────────────────────────────────────┐
+│  Web Layer                          │
+│  ├─ SignUpRestAdapter               │───┐
+│  └─ LoginRestAdapter                │   │
+└─────────────────────────────────────┘   │
+                                          │ depends on
+                                          ▼
+┌─────────────────────────────────────┐
+│  Core Layer                         │
+│  ├─ UserService (interface)         │
+│  ├─ DomainUserService (impl)        │
+│  └─ UserRepository (interface)      │
+└─────────────────────────────────────┘
+                                          ▲
+                                          │ depends on
+┌─────────────────────────────────────┐   │
+│  Data Layer                         │   │
+│  ├─ UserJpaAdapter                  │───┘
+│  └─ UserEntity                      │
+└─────────────────────────────────────┘
+```
+
+## Implementation in Our Project
+
+### Package Structure
+
+The project follows a clear package structure that reflects the hexagonal architecture:
+
+```
+com.fbaron/
+├── core/                    # Internal (Core Hexagon)
+│   ├── model/              # Domain models
+│   ├── service/            # Driving ports (interfaces)
+│   ├── domain/             # Business logic implementations
+│   ├── repo/               # Driven ports (interfaces)
+│   ├── exception/          # Domain exceptions
+│   └── util/               # Core utilities
+│
+├── web/                    # External (Driving Adapters)
+│   ├── rest/               # REST controllers
+│   ├── dto/                # Data transfer objects
+│   └── mapper/             # DTO to model mappers
+│
+└── data/                   # External (Driven Adapters)
+    ├── jpa/                # JPA implementations
+    │   ├── entity/         # JPA entities
+    │   ├── repository/     # Spring Data repositories
+    │   └── mapper/         # Entity to model mappers
+    └── config/             # Data layer configuration
+```
+
+### Benefits in Practice
+
+<AccordionGroup>
+  <Accordion title="Testing Without Database">
+    You can test the core business logic by providing mock implementations of `UserRepository`:
+    
+    ```java
+    // Test example
+    UserRepository mockRepo = mock(UserRepository.class);
+    UserService service = new DomainUserService(
+        jwtService, 
+        mockRepo,  // Mock instead of real JPA adapter
+        passwordEncoder
+    );
+    ```
+  </Accordion>
+  
+  <Accordion title="Switching Databases">
+    Want to switch from JPA to MongoDB? Simply create a new adapter:
+    
+    ```java
+    public class UserMongoAdapter implements UserRepository {
+        // MongoDB implementation
+    }
+    ```
+    
+    No changes needed in the core layer!
+  </Accordion>
+  
+  <Accordion title="Adding New Interfaces">
+    Need to add GraphQL? Create a new driving adapter:
+    
+    ```java
+    @Controller
+    public class UserGraphQLAdapter {
+        private final UserService userService;  // Same port!
+        // GraphQL resolvers
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Mapping Across Boundaries
+
+Each layer has its own representation of data:
+
+<CardGroup cols={3}>
+  <Card title="Web Layer">
+    **DTOs** (Data Transfer Objects)
+    - `SignUpDTO`
+    - `UserDTO`
+    - `LoginDTO`
+  </Card>
+  <Card title="Core Layer">
+    **Domain Models**
+    - `User`
+    - `Phone`
+  </Card>
+  <Card title="Data Layer">
+    **Entities**
+    - `UserEntity`
+    - `PhoneEntity`
+  </Card>
+</CardGroup>
+
+**Mappers** handle conversions between layers:
+
+```java
+// Web to Core
+UserDtoMapper.dtoToModel(SignUpDTO) → User
+
+// Core to Data
+UserJpaMapper.modelToEntity(User) → UserEntity
+```
+
+<Note>
+This mapping might seem like extra work, but it provides complete isolation. Changes to the database schema won't affect your API contracts or business logic.
+</Note>
+
+## Key Takeaways
+
+1. **Core is king**: The business logic dictates requirements through interfaces
+2. **Dependencies point inward**: External layers depend on the core, never the reverse
+3. **Adapters are replaceable**: Swap implementations without touching business logic
+4. **Ports define contracts**: Interfaces establish clear boundaries and expectations
+5. **Isolation enables testing**: Test business logic independently of frameworks
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Core Layer" icon="brain" href="/architecture/core-layer">
+    Explore domain models and business logic
+  </Card>
+  <Card title="Web Layer" icon="globe" href="/architecture/web-layer">
+    Learn about REST adapters
+  </Card>
+  <Card title="Data Layer" icon="database" href="/architecture/data-layer">
+    Understand persistence adapters
+  </Card>
+</CardGroup>

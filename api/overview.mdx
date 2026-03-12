@@ -1,0 +1,117 @@
+---
+title: 'API Overview'
+description: 'Overview of the User Management Microservice API endpoints'
+---
+
+## Base URL
+
+All API endpoints are prefixed with the base path:
+
+```
+http://localhost:8080/user-management
+```
+
+## Available Endpoints
+
+The User Management Microservice provides the following API endpoints:
+
+<CardGroup cols={2}>
+  <Card title="Sign Up" icon="user-plus" href="/api/sign-up">
+    Register a new user in the system
+  </Card>
+  <Card title="Login" icon="right-to-bracket" href="/api/login">
+    Authenticate and log in an existing user
+  </Card>
+</CardGroup>
+
+## Authentication
+
+The API uses token-based authentication. After successful sign-up, a token is generated and returned in the response. This token should be used for subsequent login requests.
+
+## Request Format
+
+All API endpoints accept and return JSON data. Make sure to include the following headers in your requests:
+
+```http
+Content-Type: application/json
+Accept: application/json
+```
+
+## Response Format
+
+All successful responses return a `UserDTO` object containing:
+
+<ResponseField name="id" type="UUID">
+  Unique identifier for the user
+</ResponseField>
+
+<ResponseField name="created" type="string">
+  Timestamp when the user was created (format: "MMM dd, yyyy hh:mm:ss a")
+</ResponseField>
+
+<ResponseField name="lastLogin" type="string">
+  Timestamp of the user's last login (format: "MMM dd, yyyy hh:mm:ss a")
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  Authentication token for the user
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean">
+  Indicates whether the user account is active
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  User's full name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  User's email address
+</ResponseField>
+
+<ResponseField name="password" type="string">
+  User's password (hashed)
+</ResponseField>
+
+<ResponseField name="phones" type="array">
+  List of phone numbers associated with the user
+  <Expandable title="Phone object structure">
+    <ResponseField name="number" type="long">
+      Phone number
+    </ResponseField>
+    <ResponseField name="cityCode" type="integer">
+      City/area code
+    </ResponseField>
+    <ResponseField name="countryCode" type="string">
+      Country code
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Error Handling
+
+The API returns appropriate HTTP status codes and error messages:
+
+- `400` - Bad Request: Invalid input data
+- `403` - Forbidden: Access denied
+- `404` - Not Found: Resource not found
+- `405` - Method Not Allowed: HTTP method not supported
+- `409` - Conflict: Resource already exists
+- `415` - Unsupported Media Type: Invalid content type
+- `500` - Internal Server Error: Server error occurred
+
+Error responses include an `ExceptionDetailDTO` object with details about the error.
+
+## OpenAPI Documentation
+
+Interactive API documentation is available at:
+
+```
+http://localhost:8080/user-management/swagger-ui/index.html
+```
+
+OpenAPI specification:
+
+```
+http://localhost:8080/user-management/v3/api-docs
+```

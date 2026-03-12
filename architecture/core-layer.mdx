@@ -1,0 +1,450 @@
+---
+title: "Core Layer"
+description: "Understanding the domain models, business logic, and ports in the core layer"
+---
+
+## Overview
+
+The **Core Layer** is the heart of the application, containing pure business logic that is independent of any external frameworks or technologies. This layer defines what the application does and what it needs, without knowing how those needs are fulfilled.
+
+<Note>
+The core layer has **no dependencies** on Spring, JPA, REST, or any other framework. All dependencies point inward toward the core.
+</Note>
+
+## Core Components
+
+The core layer is organized into several key components:
+
+```
+core/
+├── model/              # Domain models (entities)
+├── service/            # Driving ports (use case interfaces)
+├── domain/             # Business logic implementations
+├── repo/               # Driven ports (repository interfaces)
+├── exception/          # Domain exceptions
+├── util/               # Core utilities
+└── constant/           # Business constants
+```
+
+## Domain Models
+
+Domain models represent the core business concepts. They are pure POJOs with no framework dependencies.
+
+### User Model
+
+The `User` model represents a user in the system:
+
+```java
+// src/main/java/com/fbaron/core/model/user/User.java
+package com.fbaron.core.model.user;
+
+import com.fbaron.core.model.phone.Phone;
+import lombok.Builder;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@Data
+@Builder
+public class User {
+    private UUID id;
+    private String name;
+    private String email;
+    private String password;
+    private LocalDateTime created;
+    private LocalDateTime lastLogin;
+    private String token;
+    private boolean isActive;
+    private List<Phone> phones;
+}
+```
+
+<Note>
+Notice the absence of:
+- `@Entity` (no JPA)
+- `@Table` (no database mapping)
+- `@JsonProperty` (no serialization concerns)
+
+This is a **pure domain object** that represents business concepts only.
+</Note>
+
+### Phone Model
+
+The `Phone` model represents a phone number associated with a user:
+
+```java
+// src/main/java/com/fbaron/core/model/phone/Phone.java
+package com.fbaron.core.model.phone;
+
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class Phone {
+    private String number;
+    private String cityCode;
+    private String countryCode;
+}
+```
+
+## Ports (Interfaces)
+
+Ports are interfaces that define the boundaries of the application. They establish contracts without implementation details.
+
+### Driving Port: UserService
+
+The `UserService` interface is a **driving port** that defines what the application can do:
+
+```java
+// src/main/java/com/fbaron/core/service/user/UserService.java
+package com.fbaron.core.service.user;
+
+import com.fbaron.core.model.user.User;
+import java.util.Optional;
+
+/**
+ * The UserService Interface provides the methods to manage the Users in the system.
+ */
+public interface UserService {
+    
+    /**
+     * Registers a new user in the system.
+     *
+     * @param user The User object to be registered
+     * @return The registered User with assigned ID and token
+     */
+    User signUp(User user);
+
+    /**
+     * Logs in a user to the system.
+     *
+     * @param token The token to be used for logging in
+     * @return The logged in User with updated lastLogin and new token
+     */
+    User login(String token);
+
+    /**
+     * Retrieves a user by email.
+     *
+     * @param email The email of the user to retrieve
+     * @return An Optional containing the User if found
+     */
+    Optional<User> getUserByEmail(String email);
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Why is this an interface?">
+    By defining the service as an interface, we:
+    1. **Decouple** the use case from its implementation
+    2. **Enable testing** with mock implementations
+    3. **Allow** multiple implementations (e.g., caching, async)
+    4. **Follow** the Dependency Inversion Principle
+  </Accordion>
+  
+  <Accordion title="Who uses this port?">
+    This port is used by **driving adapters** in the web layer:
+    - `SignUpRestAdapter`
+    - `LoginRestAdapter`
+    - Any future GraphQL, gRPC, or CLI adapters
+  </Accordion>
+</AccordionGroup>
+
+### Driven Port: UserRepository
+
+The `UserRepository` interface is a **driven port** that defines what the core needs from persistence:
+
+```java
+// src/main/java/com/fbaron/core/repo/user/UserRepository.java
+package com.fbaron.core.repo.user;
+
+import com.fbaron.core.model.user.User;
+import java.util.Optional;
+
+/**
+ * The UserRepository Interface provides the methods to manage 
+ * the Users at repository level.
+ */
+public interface UserRepository {
+    
+    /**
+     * Saves a User in the repository.
+     *
+     * @param user The User to save
+     * @return The saved User
+     */
+    User saveUser(User user);
+
+    /**
+     * Finds a User by email.
+     *
+     * @param email The email to search for
+     * @return An Optional containing the User if found
+     */
+    Optional<User> findUserByEmail(String email);
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Why is this an interface?">
+    The repository is an interface because:
+    1. **The core doesn't care** how data is stored (JPA, MongoDB, REST API)
+    2. **Testing is easier** with mock repositories
+    3. **Implementation can change** without affecting business logic
+    4. **Follows** the Dependency Inversion Principle
+  </Accordion>
+  
+  <Accordion title="Who implements this port?">
+    This port is implemented by **driven adapters** in the data layer:
+    - `UserJpaAdapter` (current implementation)
+    - Could be `UserMongoAdapter`, `UserRestAdapter`, etc.
+  </Accordion>
+</AccordionGroup>
+
+## Domain Services (Business Logic)
+
+Domain services implement the business logic by fulfilling the contracts defined by the ports.
+
+### DomainUserService
+
+The `DomainUserService` implements the `UserService` interface and contains the core business logic:
+
+```java
+// src/main/java/com/fbaron/core/domain/user/DomainUserService.java
+package com.fbaron.core.domain.user;
+
+import com.fbaron.core.exception.jwt.JwtSignatureException;
+import com.fbaron.core.exception.user.UserAlreadyExistsException;
+import com.fbaron.core.exception.user.UserNotFoundException;
+import com.fbaron.core.model.user.User;
+import com.fbaron.core.repo.user.UserRepository;
+import com.fbaron.core.service.jwt.JwtService;
+import com.fbaron.core.service.user.UserService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class DomainUserService implements UserService {
+
+    private final JwtService jwtService;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    @Override
+    public User signUp(User user) {
+        // Business rule: Email must be unique
+        if (getUserByEmail(user.getEmail()).isPresent())
+            throw new UserAlreadyExistsException("User already exists");
+        
+        // Business logic: Set up new user
+        user.setId(UUID.randomUUID());
+        var dateTime = LocalDateTime.now();
+        user.setCreated(dateTime);
+        user.setLastLogin(dateTime);
+        user.setActive(true);
+        
+        // Security: Encode password
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        
+        // Generate authentication token
+        user.setToken(jwtService.generateToken(user.getEmail()));
+        
+        return userRepository.saveUser(user);
+    }
+
+    @Override
+    public User login(String token) {
+        // Security: Validate token
+        if (!jwtService.validateToken(token)) 
+            throw new JwtSignatureException("Token cannot be trusted");
+        
+        var username = jwtService.extractUsername(token);
+        var user = getUserByEmail(username)
+                .orElseThrow(() -> new UserNotFoundException(
+                    "User not found with email: " + username));
+        
+        // Business logic: Update last login and generate new token
+        user.setLastLogin(LocalDateTime.now());
+        user.setToken(jwtService.generateToken(username));
+        
+        return userRepository.saveUser(user);
+    }
+
+    @Override
+    public Optional<User> getUserByEmail(String email) {
+        return userRepository.findUserByEmail(email);
+    }
+}
+```
+
+### Key Business Rules Implemented
+
+<CardGroup cols={2}>
+  <Card title="Sign Up" icon="user-plus">
+    1. Validate email uniqueness
+    2. Generate UUID
+    3. Set timestamps
+    4. Encode password
+    5. Generate JWT token
+    6. Mark as active
+  </Card>
+  <Card title="Login" icon="right-to-bracket">
+    1. Validate JWT token
+    2. Extract username from token
+    3. Verify user exists
+    4. Update last login time
+    5. Generate new token
+  </Card>
+</CardGroup>
+
+<Note>
+Notice how the service **orchestrates** different concerns:
+- JWT token operations (delegated to `JwtService`)
+- Password encoding (delegated to `PasswordEncoder`)
+- Data persistence (delegated to `UserRepository`)
+
+This is the essence of domain-driven design: the domain service coordinates between different parts to implement business use cases.
+</Note>
+
+## Domain Exceptions
+
+The core layer defines its own exceptions to represent business rule violations:
+
+```java
+// src/main/java/com/fbaron/core/exception/user/UserAlreadyExistsException.java
+public class UserAlreadyExistsException extends RuntimeException {
+    public UserAlreadyExistsException(String message) {
+        super(message);
+    }
+}
+
+// src/main/java/com/fbaron/core/exception/user/UserNotFoundException.java
+public class UserNotFoundException extends RuntimeException {
+    public UserNotFoundException(String message) {
+        super(message);
+    }
+}
+
+// src/main/java/com/fbaron/core/exception/jwt/JwtSignatureException.java
+public class JwtSignatureException extends RuntimeException {
+    public JwtSignatureException(String message) {
+        super(message);
+    }
+}
+```
+
+<Note>
+These are **domain exceptions** that represent business rule violations. They are independent of HTTP status codes or database constraints.
+</Note>
+
+## Utilities and Validators
+
+The core layer includes utilities for domain-specific validation:
+
+```java
+// Password format validation annotation
+@PasswordFormat
+private String password;
+
+// Custom validator
+public class PasswordFormatValidator 
+        implements ConstraintValidator<PasswordFormat, String> {
+    // Validation logic
+}
+```
+
+## Dependency Flow
+
+```
+┌──────────────────────────────────────┐
+│  DomainUserService                   │
+│  (implements UserService)            │
+│                                      │
+│  Dependencies (injected):            │
+│  ├─ UserRepository (interface)       │
+│  ├─ JwtService (interface)           │
+│  └─ PasswordEncoder (interface)      │
+└──────────────────────────────────────┘
+              ↓ uses
+┌──────────────────────────────────────┐
+│  User (domain model)                 │
+│  - Pure POJO                         │
+│  - No framework dependencies         │
+└──────────────────────────────────────┘
+```
+
+<Note>
+All dependencies are **interfaces**, making the core completely decoupled from concrete implementations.
+</Note>
+
+## Testing the Core Layer
+
+Because the core has no external dependencies, it's extremely testable:
+
+```java
+@Test
+void signUp_shouldCreateUser_whenEmailIsUnique() {
+    // Arrange
+    UserRepository mockRepo = mock(UserRepository.class);
+    JwtService mockJwt = mock(JwtService.class);
+    PasswordEncoder mockEncoder = mock(PasswordEncoder.class);
+    
+    when(mockRepo.findUserByEmail(anyString()))
+        .thenReturn(Optional.empty());
+    when(mockJwt.generateToken(anyString()))
+        .thenReturn("test-token");
+    when(mockEncoder.encode(anyString()))
+        .thenReturn("encoded-password");
+    
+    DomainUserService service = new DomainUserService(
+        mockJwt, mockRepo, mockEncoder
+    );
+    
+    // Act
+    User user = User.builder()
+        .email("test@example.com")
+        .password("password123")
+        .build();
+    service.signUp(user);
+    
+    // Assert
+    verify(mockRepo).saveUser(any(User.class));
+}
+```
+
+## Key Principles
+
+<CardGroup cols={2}>
+  <Card title="Pure Business Logic" icon="brain">
+    No framework code, only domain concepts and business rules
+  </Card>
+  <Card title="Dependency Inversion" icon="arrows-rotate">
+    Depend on interfaces, not concrete implementations
+  </Card>
+  <Card title="Single Responsibility" icon="bullseye">
+    Each service handles one business capability
+  </Card>
+  <Card title="Framework Independence" icon="shield">
+    Can be tested and evolved without Spring, JPA, or REST
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Web Layer" icon="globe" href="/architecture/web-layer">
+    Learn how REST adapters use the core services
+  </Card>
+  <Card title="Data Layer" icon="database" href="/architecture/data-layer">
+    Understand how repositories are implemented
+  </Card>
+</CardGroup>

@@ -1,0 +1,206 @@
+---
+title: Installation
+description: Learn how to install and set up the User Management Microservice
+---
+
+## Prerequisites
+
+Before installing the User Management Microservice, ensure you have the following prerequisites installed on your system:
+
+<CardGroup cols={3}>
+  <Card title="Java 11" icon="java">
+    Java SE Development Kit 11.0.20 or higher
+  </Card>
+  <Card title="Gradle" icon="box">
+    Build automation tool for compilation and dependency management
+  </Card>
+  <Card title="Git" icon="git">
+    Distributed version control system
+  </Card>
+</CardGroup>
+
+<Note>
+  This application requires **Java 11** as specified in the `build.gradle` configuration with `sourceCompatibility = "11"`.
+</Note>
+
+### System Requirements
+
+- **Java Version**: 11.0.20 or higher
+- **Gradle Version**: Compatible with Gradle wrapper included
+- **Memory**: Minimum 512MB RAM
+- **Disk Space**: At least 100MB for application and dependencies
+
+## Installation Steps
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the User Management Microservice repository from GitHub:
+
+    ```bash
+    git clone https://github.com/ferneybaron/user-management-ms.git
+    cd user-management-ms
+    ```
+  </Step>
+
+  <Step title="Verify Prerequisites">
+    Check that Java 11 is properly installed:
+
+    ```bash
+    java -version
+    ```
+
+    You should see output indicating Java version 11.x.x.
+  </Step>
+
+  <Step title="Build the Application">
+    Use Gradle to build the application and download all dependencies:
+
+    ```bash
+    ./gradlew build
+    ```
+
+    This command will:
+    - Download all required dependencies
+    - Compile the source code
+    - Run unit tests
+    - Generate test coverage reports
+  </Step>
+
+  <Step title="Run the Application">
+    Start the application using the Gradle bootRun task:
+
+    ```bash
+    ./gradlew bootRun
+    ```
+
+    The application will start on port **8080** with the context path `/user-management`.
+  </Step>
+
+  <Step title="Verify Installation">
+    Once the application is running, verify it's working by accessing the Swagger UI:
+
+    ```
+    http://localhost:8080/user-management/swagger-ui/index.html
+    ```
+
+    You can also access the OpenAPI documentation at:
+
+    ```
+    http://localhost:8080/user-management/v3/api-docs
+    ```
+  </Step>
+</Steps>
+
+## Dependencies
+
+The application uses the following key dependencies:
+
+### Core Dependencies
+
+```gradle
+// Spring Boot Starters
+implementation 'org.springframework.boot:spring-boot-starter-actuator'
+implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+implementation 'org.springframework.boot:spring-boot-starter-validation'
+implementation 'org.springframework.boot:spring-boot-starter-web'
+implementation 'org.springframework.boot:spring-boot-starter-security'
+```
+
+### Database
+
+```gradle
+// H2 In-Memory Database
+runtimeOnly 'com.h2database:h2'
+```
+
+### Security and JWT
+
+```gradle
+// JWT Token Management
+implementation "io.jsonwebtoken:jjwt:0.12.3"
+```
+
+### API Documentation
+
+```gradle
+// OpenAPI/Swagger
+implementation "org.springdoc:springdoc-openapi-ui:1.7.0"
+```
+
+<Tip>
+  All dependencies are managed through the Spring Boot dependency management plugin, ensuring compatible versions.
+</Tip>
+
+## Build Configuration
+
+The application is configured with the following properties in `gradle.properties`:
+
+```properties
+springBootVersion = 2.5.14
+groupPackage = com.fbaron
+appVersion = 0.0.1
+sourceCompatibilityProp = 11
+targetCompatibilityProp = 11
+```
+
+## Testing
+
+Run the test suite to verify your installation:
+
+```bash
+./gradlew test
+```
+
+### Test Coverage Report
+
+Generate a Jacoco test coverage report:
+
+```bash
+./gradlew jacocoTestReport
+```
+
+View the report at:
+
+```
+build/jacocoHtml/index.html
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Port 8080 already in use">
+    If port 8080 is already in use, you can change the port in `application.yaml`:
+
+    ```yaml
+    server:
+      port: 8081
+    ```
+  </Accordion>
+
+  <Accordion title="Java version mismatch">
+    Ensure you're using Java 11. If you have multiple Java versions installed, set the `JAVA_HOME` environment variable:
+
+    ```bash
+    export JAVA_HOME=/path/to/java11
+    ```
+  </Accordion>
+
+  <Accordion title="Build fails with dependency errors">
+    Clean the Gradle cache and rebuild:
+
+    ```bash
+    ./gradlew clean build --refresh-dependencies
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Learn how to configure the application settings
+  </Card>
+  <Card title="Authentication" icon="lock" href="/guides/authentication">
+    Understand the JWT authentication flow
+  </Card>
+</CardGroup>

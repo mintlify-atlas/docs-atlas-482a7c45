@@ -1,0 +1,160 @@
+---
+title: "Architecture Overview"
+description: "Understanding the hexagonal architecture pattern in the User Management Microservice"
+---
+
+## Introduction
+
+The User Management Microservice is designed using **Hexagonal Architecture** (also known as Ports and Adapters architecture). This architectural pattern separates the core business logic from external dependencies such as databases, UI frameworks, and other external systems.
+
+<Note>
+Hexagonal Architecture ensures that the core business logic remains independent and testable, while external dependencies can be swapped or modified without affecting the core domain.
+</Note>
+
+## Core Principles
+
+The hexagonal architecture defines two main parts:
+
+<CardGroup cols={2}>
+  <Card title="Internal (Core)" icon="brain">
+    Contains the pure business logic, domain models, and use cases that are independent of any external technology.
+  </Card>
+  <Card title="External (Adapters)" icon="plug">
+    Handles interactions with external systems like databases, REST APIs, and other services.
+  </Card>
+</CardGroup>
+
+## Three-Layer Architecture
+
+Our application is divided into three distinct layers:
+
+```
+┌─────────────────────────────────────┐
+│         Web Layer (External)        │
+│   REST Controllers, DTOs, Mappers   │
+└──────────────┬──────────────────────┘
+               │
+               │ Uses Port (UserService)
+               ▼
+┌─────────────────────────────────────┐
+│        Core Layer (Internal)        │
+│  Domain Logic, Models, Services     │
+└──────────────┬──────────────────────┘
+               │
+               │ Uses Port (UserRepository)
+               ▼
+┌─────────────────────────────────────┐
+│      Data Layer (External)          │
+│  JPA, Entities, Database Adapters   │
+└─────────────────────────────────────┘
+```
+
+### Layer Descriptions
+
+<AccordionGroup>
+  <Accordion title="Web Layer (External)">
+    Responsible for handling HTTP requests and responses. This layer:
+    - Exposes REST endpoints
+    - Validates incoming requests
+    - Converts DTOs to domain models
+    - Returns formatted responses
+    
+    **Key Components**: REST controllers, DTOs, mappers
+  </Accordion>
+  
+  <Accordion title="Core Layer (Internal)">
+    Contains the heart of the application. This layer:
+    - Implements business logic
+    - Defines domain models
+    - Declares ports (interfaces)
+    - Orchestrates use cases
+    
+    **Key Components**: Domain models, services, repositories (interfaces)
+  </Accordion>
+  
+  <Accordion title="Data Layer (External)">
+    Manages data persistence and external integrations. This layer:
+    - Implements repository interfaces
+    - Maps domain models to entities
+    - Interacts with databases
+    - Handles data transactions
+    
+    **Key Components**: JPA repositories, entities, adapters
+  </Accordion>
+</AccordionGroup>
+
+## Ports and Adapters Pattern
+
+The architecture uses **ports** (interfaces) to define contracts and **adapters** to implement those contracts.
+
+### Ports (Interfaces)
+
+Ports are defined in the core layer and represent the application's boundaries:
+
+- **Driving Ports**: Used by external actors (e.g., `UserService` interface)
+- **Driven Ports**: Used by the core to interact with external systems (e.g., `UserRepository` interface)
+
+### Adapters (Implementations)
+
+Adapters implement the ports and handle external interactions:
+
+- **Driving Adapters**: REST controllers that use the core services
+- **Driven Adapters**: JPA adapters that implement repository interfaces
+
+<Note>
+This separation allows you to replace JPA with MongoDB or REST with GraphQL without changing the core business logic.
+</Note>
+
+## Key Benefits
+
+<CardGroup cols={2}>
+  <Card title="Testability" icon="vial">
+    Core business logic can be tested in isolation without external dependencies.
+  </Card>
+  <Card title="Flexibility" icon="shuffle">
+    External technologies can be swapped without affecting the core.
+  </Card>
+  <Card title="Maintainability" icon="wrench">
+    Clear separation of concerns makes the codebase easier to understand and modify.
+  </Card>
+  <Card title="Independence" icon="shield">
+    Core domain logic is independent of frameworks, databases, and UI.
+  </Card>
+</CardGroup>
+
+## Data Flow Example
+
+Here's how a user sign-up request flows through the layers:
+
+```
+1. HTTP POST /api/v1/sign-up
+   ↓
+2. SignUpRestAdapter (Web Layer)
+   - Receives SignUpDTO
+   - Maps to User model
+   ↓
+3. DomainUserService (Core Layer)
+   - Validates business rules
+   - Generates UUID, timestamps
+   - Encodes password
+   ↓
+4. UserJpaAdapter (Data Layer)
+   - Maps User to UserEntity
+   - Persists to database
+   ↓
+5. Response flows back up the layers
+```
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Hexagonal Pattern" icon="hexagon" href="/architecture/hexagonal">
+    Deep dive into the hexagonal architecture pattern
+  </Card>
+  <Card title="Core Layer" icon="brain" href="/architecture/core-layer">
+    Explore the domain models and business logic
+  </Card>
+  <Card title="Web Layer" icon="globe" href="/architecture/web-layer">
+    Learn about REST adapters and DTOs
+  </Card>
+</CardGroup>

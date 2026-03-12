@@ -1,0 +1,212 @@
+---
+title: 'Sign Up'
+description: 'Register a new user in the system'
+api: 'POST /user-management/api/v1/sign-up'
+---
+
+## Overview
+
+The Sign Up endpoint allows you to register a new user in the system by providing user details including name, email, password, and optional phone numbers.
+
+<Note>
+  The password must follow a specific format enforced by the `@PasswordFormat` validation annotation.
+</Note>
+
+## Endpoint
+
+```
+POST /user-management/api/v1/sign-up
+```
+
+## Request Headers
+
+<ParamField header="Content-Type" type="string" required>
+  Must be `application/json`
+</ParamField>
+
+<ParamField header="Accept" type="string" required>
+  Must be `application/json`
+</ParamField>
+
+## Request Body
+
+<ParamField body="name" type="string">
+  The user's full name
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  The user's email address. Must be a valid email format matching the pattern: `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$`
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The user's password. Must conform to the password format requirements.
+</ParamField>
+
+<ParamField body="phones" type="array">
+  List of phone numbers associated with the user
+  <Expandable title="Phone object properties">
+    <ParamField body="number" type="long" required>
+      The phone number
+    </ParamField>
+    <ParamField body="cityCode" type="integer" required>
+      The city or area code
+    </ParamField>
+    <ParamField body="countryCode" type="string" required>
+      The country code (e.g., "+1", "+44")
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="UUID">
+  Unique identifier assigned to the newly created user
+</ResponseField>
+
+<ResponseField name="created" type="string">
+  Timestamp when the user was created (format: "MMM dd, yyyy hh:mm:ss a")
+</ResponseField>
+
+<ResponseField name="lastLogin" type="string">
+  Timestamp of the user's last login (format: "MMM dd, yyyy hh:mm:ss a")
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  Authentication token generated for the user. Save this token for login requests.
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean">
+  Indicates whether the user account is active (typically `true` for new users)
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The user's full name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The user's email address
+</ResponseField>
+
+<ResponseField name="password" type="string">
+  The user's hashed password
+</ResponseField>
+
+<ResponseField name="phones" type="array">
+  List of phone numbers associated with the user
+</ResponseField>
+
+## Status Codes
+
+<ResponseField name="201" type="Created">
+  User successfully created
+</ResponseField>
+
+<ResponseField name="400" type="Bad Request">
+  Invalid request body or validation errors
+</ResponseField>
+
+<ResponseField name="405" type="Method Not Allowed">
+  HTTP method not supported for this endpoint
+</ResponseField>
+
+<ResponseField name="409" type="Conflict">
+  User with the provided email already exists
+</ResponseField>
+
+<ResponseField name="415" type="Unsupported Media Type">
+  Request content type is not application/json
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  An unexpected error occurred on the server
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST http://localhost:8080/user-management/api/v1/sign-up \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "password": "SecurePass123!",
+    "phones": [
+      {
+        "number": 1234567890,
+        "cityCode": 1,
+        "countryCode": "+1"
+      }
+    ]
+  }'
+```
+
+```json Request Body
+{
+  "name": "John Doe",
+  "email": "john.doe@example.com",
+  "password": "SecurePass123!",
+  "phones": [
+    {
+      "number": 1234567890,
+      "cityCode": 1,
+      "countryCode": "+1"
+    }
+  ]
+}
+```
+
+```json Response (201 Created)
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "created": "Mar 12, 2026 10:30:45 AM",
+  "lastLogin": "Mar 12, 2026 10:30:45 AM",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "isActive": true,
+  "name": "John Doe",
+  "email": "john.doe@example.com",
+  "password": "$2a$10$hashed_password_string",
+  "phones": [
+    {
+      "number": 1234567890,
+      "cityCode": 1,
+      "countryCode": "+1"
+    }
+  ]
+}
+```
+
+```json Error Response (400 Bad Request)
+{
+  "timestamp": "2026-03-12T10:30:45.123Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "email must be valid",
+  "path": "/user-management/api/v1/sign-up"
+}
+```
+
+```json Error Response (409 Conflict)
+{
+  "timestamp": "2026-03-12T10:30:45.123Z",
+  "status": 409,
+  "error": "Conflict",
+  "message": "User with email john.doe@example.com already exists",
+  "path": "/user-management/api/v1/sign-up"
+}
+```
+
+</CodeGroup>
+
+## Implementation Reference
+
+The Sign Up endpoint is implemented in:
+- Controller: `com.fbaron.web.rest.SignUpRestAdapter` (SignUpRestAdapter.java:64)
+- Request DTO: `com.fbaron.web.dto.user.SignUpDTO` (SignUpDTO.java)
+- Response DTO: `com.fbaron.web.dto.user.UserDTO` (UserDTO.java)
+
+<Tip>
+  After successful sign-up, save the returned `token` value. You'll need it to authenticate the user via the Login endpoint.
+</Tip>

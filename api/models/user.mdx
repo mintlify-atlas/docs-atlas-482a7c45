@@ -1,0 +1,193 @@
+---
+title: 'User Model'
+description: 'User data model and API representation'
+---
+
+## Overview
+
+The User model represents a user entity in the system. It contains user identity information, authentication details, and associated phone numbers.
+
+## Model Structure
+
+### Core Model
+
+The core domain model is defined in `User.java`:
+
+```java User.java
+package com.fbaron.core.model.user;
+
+import com.fbaron.core.model.phone.Phone;
+import lombok.Builder;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@Data
+@Builder
+public class User {
+    private UUID id;
+    private String name;
+    private String email;
+    private String password;
+    private LocalDateTime created;
+    private LocalDateTime lastLogin;
+    private String token;
+    private boolean isActive;
+    private List<Phone> phones;
+}
+```
+
+## Fields
+
+<ResponseField name="id" type="UUID" required>
+  Unique identifier for the user. Automatically generated as a UUID.
+</ResponseField>
+
+<ResponseField name="name" type="String" required>
+  The full name of the user.
+</ResponseField>
+
+<ResponseField name="email" type="String" required>
+  The user's email address. Must be unique across the system.
+</ResponseField>
+
+<ResponseField name="password" type="String" required>
+  The user's password. Stored securely (should be hashed).
+</ResponseField>
+
+<ResponseField name="created" type="LocalDateTime">
+  Timestamp when the user account was created.
+  
+  <Expandable title="Format">
+    In API responses, formatted as: `MMM dd, yyyy hh:mm:ss a`
+    
+    Example: `Nov 22, 2023 10:30:45 AM`
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="lastLogin" type="LocalDateTime">
+  Timestamp of the user's most recent login.
+  
+  <Expandable title="Format">
+    In API responses, formatted as: `MMM dd, yyyy hh:mm:ss a`
+    
+    Example: `Nov 22, 2023 10:30:45 AM`
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="token" type="String">
+  Authentication token associated with the user session.
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean" default="false">
+  Indicates whether the user account is active and can authenticate.
+</ResponseField>
+
+<ResponseField name="phones" type="List<Phone>">
+  List of phone numbers associated with the user account.
+  
+  See [Phone Model](/api/models/phone) for detailed structure.
+</ResponseField>
+
+## API Representation (DTO)
+
+When interacting with the REST API, users are represented using the `UserDTO` class:
+
+```java UserDTO.java
+package com.fbaron.web.dto.user;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fbaron.web.dto.phone.PhoneDTO;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+public class UserDTO {
+    private UUID id;
+    
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "MMM dd, yyyy hh:mm:ss a")
+    private LocalDateTime created;
+    
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "MMM dd, yyyy hh:mm:ss a")
+    private LocalDateTime lastLogin;
+    
+    private String token;
+    
+    @JsonProperty("isActive")
+    private boolean isActive;
+    
+    private String name;
+    private String email;
+    private String password;
+    
+    private List<PhoneDTO> phones;
+}
+```
+
+## Example JSON Response
+
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "John Doe",
+  "email": "john.doe@example.com",
+  "password": "hashed_password_here",
+  "created": "Nov 22, 2023 10:30:45 AM",
+  "lastLogin": "Mar 12, 2026 02:15:30 PM",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "isActive": true,
+  "phones": [
+    {
+      "number": 1234567890,
+      "cityCode": 212,
+      "countryCode": "+1"
+    }
+  ]
+}
+```
+
+## Database Entity
+
+The User model is persisted using JPA with the `UserEntity` class:
+
+<Expandable title="UserEntity.java">
+```java
+package com.fbaron.data.jpa.user.entity;
+
+import com.fbaron.data.jpa.phone.entity.PhoneEntity;
+import javax.persistence.*;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@Entity
+@Table(name = "User")
+public class UserEntity {
+    @Id
+    private UUID id;
+    
+    private String name;
+    private String email;
+    private String password;
+    private LocalDateTime created;
+    private LocalDateTime lastLogin;
+    private String token;
+    private boolean isActive;
+    
+    @OneToMany(cascade = CascadeType.ALL)
+    private List<PhoneEntity> phones;
+}
+```
+</Expandable>
+
+<Note>
+  The password field should always be hashed before storage. Never store plain-text passwords.
+</Note>
+
+## Related Models
+
+- [Phone Model](/api/models/phone) - Associated phone numbers for the user

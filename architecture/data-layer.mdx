@@ -1,0 +1,599 @@
+---
+title: "Data Layer"
+description: "Understanding persistence adapters, JPA entities, and the data layer in hexagonal architecture"
+---
+
+## Overview
+
+The **Data Layer** is an **external layer** that acts as a **driven adapter** in the hexagonal architecture. It implements the repository interfaces defined by the core layer and handles all data persistence concerns.
+
+<Note>
+The data layer depends on the core layer (implementing its interfaces), but the core layer has no knowledge of JPA, databases, or persistence technologies.
+</Note>
+
+## Responsibilities
+
+The data layer is responsible for:
+
+<CardGroup cols={2}>
+  <Card title="Persistence" icon="database">
+    Saving and retrieving data from the database
+  </Card>
+  <Card title="Data Mapping" icon="arrows-rotate">
+    Converting between domain models and database entities
+  </Card>
+  <Card title="Transaction Management" icon="gears">
+    Handling database transactions and consistency
+  </Card>
+  <Card title="Query Implementation" icon="magnifying-glass">
+    Implementing specific data access patterns
+  </Card>
+</CardGroup>
+
+## Package Structure
+
+```
+data/
+├── jpa/                    # JPA implementations
+│   ├── user/
+│   │   ├── UserJpaAdapter.java        # Repository implementation
+│   │   ├── entity/
+│   │   │   └── UserEntity.java        # JPA entity
+│   │   ├── repository/
+│   │   │   └── UserJpaRepository.java # Spring Data repository
+│   │   └── mapper/
+│   │       └── UserJpaMapper.java     # Entity to model mapper
+│   └── phone/
+│       └── entity/
+│           └── PhoneEntity.java
+└── config/                 # Data layer configuration
+    ├── user/
+    │   └── UserConfig.java
+    ├── security/
+    │   └── SecurityConfig.java
+    ├── jwt/
+    │   └── JwtConfig.java
+    └── encoder/
+        └── EncoderConfig.java
+```
+
+## JPA Entities
+
+JPA entities are the database representation of domain concepts. They contain JPA annotations and persistence concerns.
+
+### UserEntity
+
+```java
+// src/main/java/com/fbaron/data/jpa/user/entity/UserEntity.java
+package com.fbaron.data.jpa.user.entity;
+
+import com.fbaron.data.jpa.phone.entity.PhoneEntity;
+import lombok.*;
+
+import javax.persistence.*;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@Getter
+@Setter
+@Builder
+@Entity
+@NoArgsConstructor
+@AllArgsConstructor
+@Table(name = "User")
+public class UserEntity {
+
+    @Id
+    private UUID id;
+
+    private String name;
+    private String email;
+    private String password;
+    private LocalDateTime created;
+    private LocalDateTime lastLogin;
+    private String token;
+    private boolean isActive;
+
+    @OneToMany(cascade = CascadeType.ALL)
+    private List<PhoneEntity> phones;
+}
+```
+
+<AccordionGroup>
+  <Accordion title="JPA Annotations Explained">
+    - `@Entity`: Marks this as a JPA entity
+    - `@Table(name = "User")`: Maps to the "User" database table
+    - `@Id`: Marks the primary key field
+    - `@OneToMany`: Defines relationship with PhoneEntity
+    - `@CascadeType.ALL`: Operations cascade to related entities
+  </Accordion>
+  
+  <Accordion title="Entity vs Domain Model">
+    **UserEntity** (Data Layer):
+    - Has JPA annotations
+    - Knows about database structure
+    - Used only in the data layer
+    
+    **User** (Core Layer):
+    - No annotations
+    - Pure business object
+    - Used throughout the application
+    
+    This separation allows changing the database schema without affecting business logic.
+  </Accordion>
+</AccordionGroup>
+
+### PhoneEntity
+
+```java
+// src/main/java/com/fbaron/data/jpa/phone/entity/PhoneEntity.java
+package com.fbaron.data.jpa.phone.entity;
+
+import lombok.*;
+import javax.persistence.*;
+
+@Getter
+@Setter
+@Builder
+@Entity
+@NoArgsConstructor
+@AllArgsConstructor
+@Table(name = "Phone")
+public class PhoneEntity {
+    
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    private String number;
+    private String cityCode;
+    private String countryCode;
+}
+```
+
+<Note>
+Entities contain **persistence details** (IDs, relationships, table names) that the domain model doesn't need to know about.
+</Note>
+
+## Spring Data Repositories
+
+Spring Data JPA provides repository implementations automatically.
+
+### UserJpaRepository
+
+```java
+// src/main/java/com/fbaron/data/jpa/user/repository/UserJpaRepository.java
+package com.fbaron.data.jpa.user.repository;
+
+import com.fbaron.data.jpa.user.entity.UserEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+import java.util.UUID;
+
+public interface UserJpaRepository extends JpaRepository<UserEntity, UUID> {
+
+    Optional<UserEntity> findByEmail(String email);
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Spring Data Magic">
+    By extending `JpaRepository`, Spring Data automatically provides:
+    - `save(UserEntity)`: Save or update
+    - `findById(UUID)`: Find by ID
+    - `findAll()`: Get all entities
+    - `delete(UserEntity)`: Delete entity
+    - Plus many more methods
+  </Accordion>
+  
+  <Accordion title="Custom Query Methods">
+    Spring Data derives queries from method names:
+    
+    ```java
+    Optional<UserEntity> findByEmail(String email);
+    ```
+    
+    This automatically generates:
+    ```sql
+    SELECT * FROM User WHERE email = ?
+    ```
+    
+    No implementation needed!
+  </Accordion>
+</AccordionGroup>
+
+## Repository Adapter
+
+The adapter implements the core's repository interface using JPA.
+
+### UserJpaAdapter
+
+```java
+// src/main/java/com/fbaron/data/jpa/user/UserJpaAdapter.java
+package com.fbaron.data.jpa.user;
+
+import com.fbaron.core.model.user.User;
+import com.fbaron.core.repo.user.UserRepository;
+import com.fbaron.data.jpa.user.mapper.UserJpaMapper;
+import com.fbaron.data.jpa.user.repository.UserJpaRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.Optional;
+
+/**
+ * JPA adapter that implements the UserRepository port.
+ */
+@Slf4j
+@RequiredArgsConstructor
+public class UserJpaAdapter implements UserRepository {
+
+    private final UserJpaRepository userJpaRepository;
+    private final UserJpaMapper userJpaMapper;
+
+    @Override
+    public User saveUser(User user) {
+        // 1. Convert domain model to entity
+        var userEntity = userJpaMapper.modelToEntity(user);
+        
+        // 2. Persist using Spring Data JPA
+        userEntity = userJpaRepository.save(userEntity);
+        
+        // 3. Convert entity back to domain model
+        user = userJpaMapper.entityToModel(userEntity);
+        
+        return user;
+    }
+
+    @Override
+    public Optional<User> findUserByEmail(String email) {
+        return userJpaRepository.findByEmail(email)
+                .map(userJpaMapper::entityToModel);
+    }
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Step 1: Model to Entity">
+    Convert the domain `User` to a JPA `UserEntity`:
+    
+    ```java
+    var userEntity = userJpaMapper.modelToEntity(user);
+    ```
+    
+    This adds JPA-specific concerns (entity state, lazy loading proxies, etc.)
+  </Accordion>
+  
+  <Accordion title="Step 2: Database Operation">
+    Use Spring Data JPA to persist:
+    
+    ```java
+    userEntity = userJpaRepository.save(userEntity);
+    ```
+    
+    This handles the actual SQL execution and transaction management.
+  </Accordion>
+  
+  <Accordion title="Step 3: Entity to Model">
+    Convert back to the domain model:
+    
+    ```java
+    user = userJpaMapper.entityToModel(userEntity);
+    ```
+    
+    The core layer receives a clean domain object with no JPA concerns.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+The adapter acts as a **translator** between the domain language (User) and the persistence language (UserEntity).
+</Note>
+
+## Entity Mappers
+
+Mappers convert between domain models and JPA entities.
+
+### UserJpaMapper
+
+```java
+// src/main/java/com/fbaron/data/jpa/user/mapper/UserJpaMapper.java
+package com.fbaron.data.jpa.user.mapper;
+
+import com.fbaron.core.model.user.User;
+import com.fbaron.data.jpa.user.entity.UserEntity;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+
+@Mapper(componentModel = "spring")
+public interface UserJpaMapper {
+
+    @Mapping(source = "active", target = "isActive")
+    User entityToModel(UserEntity entity);
+
+    @Mapping(source = "active", target = "isActive")
+    UserEntity modelToEntity(User model);
+}
+```
+
+<Note>
+MapStruct generates type-safe, high-performance mapping code at compile time. The `@Mapping` annotation handles field name differences.
+</Note>
+
+## Configuration
+
+The data layer includes configuration beans that wire everything together.
+
+### UserConfig
+
+```java
+// src/main/java/com/fbaron/data/config/user/UserConfig.java
+package com.fbaron.data.config.user;
+
+import com.fbaron.core.repo.user.UserRepository;
+import com.fbaron.data.jpa.user.UserJpaAdapter;
+import com.fbaron.data.jpa.user.mapper.UserJpaMapper;
+import com.fbaron.data.jpa.user.repository.UserJpaRepository;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class UserConfig {
+
+    @Bean
+    public UserRepository userRepository(
+            UserJpaRepository userJpaRepository,
+            UserJpaMapper userJpaMapper) {
+        return new UserJpaAdapter(userJpaRepository, userJpaMapper);
+    }
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Why this configuration?">
+    This configuration creates a bean of type `UserRepository` (the interface) but returns a `UserJpaAdapter` (the implementation).
+    
+    Benefits:
+    1. **Dependency Inversion**: Core depends on `UserRepository` interface
+    2. **Flexibility**: Can easily swap implementations
+    3. **Testability**: Can inject mocks for testing
+  </Accordion>
+  
+  <Accordion title="Switching implementations">
+    To switch from JPA to MongoDB:
+    
+    ```java
+    @Bean
+    public UserRepository userRepository(
+            UserMongoRepository mongoRepo,
+            UserMongoMapper mapper) {
+        return new UserMongoAdapter(mongoRepo, mapper);
+    }
+    ```
+    
+    No changes needed in the core or web layers!
+  </Accordion>
+</AccordionGroup>
+
+## Data Flow Diagram
+
+```
+Core Layer
+    │
+    │ userRepository.saveUser(user)
+    │ (interface call)
+    ▼
+UserJpaAdapter
+    │
+    │ 1. modelToEntity(user) → UserEntity
+    │
+    ▼
+UserJpaRepository (Spring Data)
+    │
+    │ 2. save(userEntity)
+    │
+    ▼
+Database
+    │
+    │ 3. INSERT/UPDATE SQL
+    │
+    ▼
+UserEntity (with ID, etc.)
+    │
+    │ 4. entityToModel(entity) → User
+    │
+    ▼
+Core Layer receives User
+```
+
+## Transaction Management
+
+Spring manages transactions automatically:
+
+```java
+@Service
+@Transactional  // All methods run in a transaction
+public class DomainUserService implements UserService {
+    // When this calls userRepository.saveUser(),
+    // it's within a transaction
+}
+```
+
+<Note>
+Transactions are managed at the **service layer** (core), but executed by the **data layer**. This keeps transaction boundaries aligned with business operations.
+</Note>
+
+## Query Examples
+
+Spring Data JPA supports various query methods:
+
+```java
+public interface UserJpaRepository extends JpaRepository<UserEntity, UUID> {
+
+    // Derived query - Spring generates SQL
+    Optional<UserEntity> findByEmail(String email);
+    
+    // Could add more:
+    List<UserEntity> findByIsActiveTrue();
+    
+    List<UserEntity> findByCreatedAfter(LocalDateTime date);
+    
+    @Query("SELECT u FROM UserEntity u WHERE u.name LIKE %:name%")
+    List<UserEntity> searchByName(@Param("name") String name);
+}
+```
+
+## Key Principles
+
+<CardGroup cols={2}>
+  <Card title="Implements Ports" icon="plug">
+    Adapters implement interfaces defined by the core layer
+  </Card>
+  <Card title="Hides Persistence" icon="eye-slash">
+    Core layer doesn't know about JPA, SQL, or database details
+  </Card>
+  <Card title="Boundary Mapping" icon="arrows-left-right">
+    Always convert entities to/from domain models at the boundary
+  </Card>
+  <Card title="Technology Specific" icon="database">
+    JPA, Hibernate, and database concerns stay in this layer
+  </Card>
+</CardGroup>
+
+## Benefits of This Approach
+
+<AccordionGroup>
+  <Accordion title="Database Independence">
+    Switch databases without affecting business logic:
+    
+    ```java
+    // From JPA/PostgreSQL
+    public class UserJpaAdapter implements UserRepository { }
+    
+    // To MongoDB
+    public class UserMongoAdapter implements UserRepository { }
+    
+    // To REST API
+    public class UserRestAdapter implements UserRepository { }
+    ```
+    
+    The core layer doesn't change!
+  </Accordion>
+  
+  <Accordion title="Schema Evolution">
+    Change database schema without affecting domain:
+    
+    ```java
+    // Add new column to table
+    @Column(name = "phone_number")
+    private String phoneNumber;
+    
+    // Mapper handles the difference
+    @Mapping(source = "phoneNumber", target = "primaryPhone")
+    ```
+  </Accordion>
+  
+  <Accordion title="Testing">
+    Test core logic without a database:
+    
+    ```java
+    // In tests
+    UserRepository mockRepo = mock(UserRepository.class);
+    when(mockRepo.findUserByEmail("test@example.com"))
+        .thenReturn(Optional.of(testUser));
+    
+    // Test business logic without DB
+    ```
+  </Accordion>
+  
+  <Accordion title="Multiple Data Sources">
+    Use different storage for different needs:
+    
+    ```java
+    @Bean("primaryUserRepo")
+    public UserRepository primary() {
+        return new UserJpaAdapter(...);
+    }
+    
+    @Bean("cacheUserRepo")
+    public UserRepository cache() {
+        return new UserRedisAdapter(...);
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Comparison: Entity vs Model
+
+| Aspect | UserEntity (Data) | User (Core) |
+|--------|-------------------|-------------|
+| **Annotations** | `@Entity`, `@Table`, `@Id` | None |
+| **Purpose** | Database persistence | Business logic |
+| **Dependencies** | JPA, Hibernate | None |
+| **Location** | Data layer only | Used everywhere |
+| **Mutability** | JPA managed | Application controlled |
+| **Relationships** | `@OneToMany`, etc. | Simple collections |
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="Read-Write Separation">
+    Separate adapters for reads and writes:
+    
+    ```java
+    @Bean
+    public UserReadRepository userReadRepo() {
+        return new UserJpaReadAdapter(...);
+    }
+    
+    @Bean
+    public UserWriteRepository userWriteRepo() {
+        return new UserJpaWriteAdapter(...);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Caching Layer">
+    Add caching without changing core:
+    
+    ```java
+    public class CachedUserRepository implements UserRepository {
+        private final UserRepository delegate;
+        private final Cache cache;
+        
+        public Optional<User> findUserByEmail(String email) {
+            return cache.get(email, 
+                () -> delegate.findUserByEmail(email));
+        }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Audit Logging">
+    Wrap adapter with audit functionality:
+    
+    ```java
+    public class AuditedUserRepository implements UserRepository {
+        private final UserRepository delegate;
+        private final AuditLogger auditLogger;
+        
+        public User saveUser(User user) {
+            auditLogger.log("Saving user: " + user.getEmail());
+            return delegate.saveUser(user);
+        }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Core Layer" icon="brain" href="/architecture/core-layer">
+    See how repositories are defined as interfaces
+  </Card>
+  <Card title="Web Layer" icon="globe" href="/architecture/web-layer">
+    Learn about the driving adapters
+  </Card>
+</CardGroup>

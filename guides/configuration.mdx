@@ -1,0 +1,297 @@
+---
+title: Configuration
+description: Configure your User Management Microservice with application settings and JWT configuration
+---
+
+## Overview
+
+The User Management Microservice is configured through the `application.yaml` file located in `src/main/resources/`. This guide covers all available configuration options.
+
+## Application Configuration
+
+The main configuration file is `application.yaml`:
+
+```yaml application.yaml
+server:
+  port: 8080
+  servlet:
+    context-path: /user-management
+
+jwt:
+  issuer: fbaron.com
+  secret: eac4fdc0548e4a8c9ef9ae599b498ec2
+  expiration: 86400000
+```
+
+## Server Configuration
+
+### Port and Context Path
+
+Configure the server port and application context path:
+
+```yaml
+server:
+  port: 8080                        # Application port
+  servlet:
+    context-path: /user-management  # Base path for all endpoints
+```
+
+<Info>
+  With this configuration, all API endpoints are accessible at `http://localhost:8080/user-management/api/v1/`
+</Info>
+
+### Changing the Port
+
+To run the application on a different port:
+
+```yaml
+server:
+  port: 9090
+```
+
+### Custom Context Path
+
+Modify the context path to match your deployment needs:
+
+```yaml
+server:
+  servlet:
+    context-path: /api
+```
+
+## JWT Configuration
+
+The application uses JWT (JSON Web Tokens) for authentication. Configure JWT settings under the `jwt` prefix:
+
+### JWT Properties
+
+<ParamField path="issuer" type="string" required>
+  The issuer identifier for JWT tokens. This value is included in the token claims and should identify your application.
+  
+  **Default**: `fbaron.com`
+</ParamField>
+
+<ParamField path="secret" type="string" required>
+  The secret key used to sign JWT tokens. This should be a strong, random string.
+  
+  **Default**: `eac4fdc0548e4a8c9ef9ae599b498ec2`
+  
+  <Warning>
+    Change this secret in production! Use a cryptographically secure random value.
+  </Warning>
+</ParamField>
+
+<ParamField path="expiration" type="long" required>
+  Token expiration time in milliseconds.
+  
+  **Default**: `86400000` (24 hours)
+</ParamField>
+
+### JWT Configuration Examples
+
+<CodeGroup>
+
+```yaml Default (24 hours)
+jwt:
+  issuer: fbaron.com
+  secret: eac4fdc0548e4a8c9ef9ae599b498ec2
+  expiration: 86400000  # 24 hours
+```
+
+```yaml Short-lived (1 hour)
+jwt:
+  issuer: mycompany.com
+  secret: your-secure-random-secret-key
+  expiration: 3600000  # 1 hour
+```
+
+```yaml Long-lived (7 days)
+jwt:
+  issuer: mycompany.com
+  secret: your-secure-random-secret-key
+  expiration: 604800000  # 7 days
+```
+
+</CodeGroup>
+
+## JWT Config Class
+
+The JWT configuration is mapped to a Java configuration class using Spring Boot's `@ConfigurationProperties`:
+
+```java JwtConfig.java
+package com.fbaron.data.config.jwt;
+
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+@Getter
+@Setter
+@Component
+@ConfigurationProperties(prefix = "jwt")
+public class JwtConfig {
+
+    private String issuer;
+    private String secret;
+    private Long expiration;
+
+}
+```
+
+<Tip>
+  The `@ConfigurationProperties(prefix = "jwt")` annotation automatically binds the YAML properties to this class.
+</Tip>
+
+## Security Configuration
+
+The application uses Spring Security with JWT authentication. The security configuration is defined in `SecurityConfig.java`:
+
+```java SecurityConfig.java
+package com.fbaron.data.config.security;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+@RequiredArgsConstructor
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
+        return httpSecurity.csrf(AbstractHttpConfigurer::disable).build();
+    }
+
+}
+```
+
+<Note>
+  CSRF protection is disabled in this configuration. Enable it for production environments if needed.
+</Note>
+
+## Database Configuration
+
+The application uses H2 in-memory database. Spring Boot auto-configures H2 with default settings.
+
+### Custom Database Configuration
+
+To configure H2 database settings, add to `application.yaml`:
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:h2:mem:userdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+```
+
+<Info>
+  Access the H2 console at: `http://localhost:8080/user-management/h2-console`
+</Info>
+
+## Environment-Specific Configuration
+
+Create profile-specific configuration files for different environments:
+
+<Steps>
+  <Step title="Create Profile Files">
+    - `application-dev.yaml` for development
+    - `application-prod.yaml` for production
+    - `application-test.yaml` for testing
+  </Step>
+
+  <Step title="Set Active Profile">
+    Activate a profile using the command line:
+
+    ```bash
+    ./gradlew bootRun --args='--spring.profiles.active=dev'
+    ```
+
+    Or set the environment variable:
+
+    ```bash
+    export SPRING_PROFILES_ACTIVE=prod
+    ./gradlew bootRun
+    ```
+  </Step>
+</Steps>
+
+### Example: Production Configuration
+
+```yaml application-prod.yaml
+server:
+  port: 80
+
+jwt:
+  issuer: production.mycompany.com
+  secret: ${JWT_SECRET}  # Read from environment variable
+  expiration: 3600000    # 1 hour for production
+
+logging:
+  level:
+    com.fbaron: INFO
+```
+
+<Warning>
+  Never commit production secrets to version control. Use environment variables or secret management systems.
+</Warning>
+
+## Configuration Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Strong Secrets" icon="key">
+    Generate cryptographically secure random values for JWT secrets in production.
+  </Card>
+  
+  <Card title="Environment Variables" icon="globe">
+    Use environment variables for sensitive configuration values.
+  </Card>
+  
+  <Card title="Profile-Specific" icon="layer-group">
+    Maintain separate configurations for dev, test, and production environments.
+  </Card>
+  
+  <Card title="Token Expiration" icon="clock">
+    Set appropriate token expiration times based on your security requirements.
+  </Card>
+</CardGroup>
+
+## Configuration Validation
+
+Verify your configuration is loaded correctly:
+
+```bash
+./gradlew bootRun --debug
+```
+
+Check the logs for configuration property bindings:
+
+```
+Binding to target org.springframework.boot.context.properties.bind.Bindable@...
+Property: jwt.issuer
+Value: fbaron.com
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/guides/authentication">
+    Learn how JWT authentication works
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the API endpoints
+  </Card>
+</CardGroup>
